@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// Customer master list
+// ============================================
+model Customer {
+  id                String    @id @default(cuid())
+  name              String
+  phone             String    @unique
+  email             String?
+  preferredCallStart String?  // "10:00" HH:mm format
+  preferredCallEnd  String?   // "18:00" HH:mm format
+  timezone          String    @default("Asia/Kolkata")
+  doNotCall         Boolean   @default(false)
+  lastCalledAt      DateTime?
+  isDeleted         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  callLogs CallLog[]
+  leads    Lead[]
+
+  @@index([phone])
+  @@index([doNotCall])
+  @@map("customers")
+}
+
+// ============================================
+// Call log — one row per phone call
+// ============================================
+model CallLog {
+  id               String     @id @default(cuid())
+  callSid          String     @unique // Twilio Call SID
+  customerId       String?
+  customer         Customer?  @relation(fields: [customerId], references: [id])
+  customerPhone    String
+  customerName     String?
+  status           String     @default("INITIATED")
+  duration         Int?       // seconds
+  conversation     String?    // [{role, content, timestamp}] (Stored as String in SQLite)
+  escalated        Boolean    @default(false)
+  escalationReason String?
+  callState        String     @default("GREETING")
+  retryCount       Int        @default(0)
+  campaignId       String?
+  campaign         Campaign?  @relation(fields: [campaignId], references: [id])
+  isDeleted        Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  leads  Lead[]
+  events CallEvent[]
+
+  @@index([callSid])
+  @@index([customerPhone])
+  @@index([status])
+  @@index([campaignId])
+  @@map("call_logs")
+}
+
+// ============================================
+// Lead — sales opportunity from a call
+// ============================================
+model Lead {
+  id           String      @id @default(cuid())
+  phone        String
+  name         String?
+  interestedIn String?
+  callLogId    String?
+  callLog      CallLog?    @relation(fields: [callLogId], references: [id])
+  customerId   String?
+  customer     Customer?   @relation(fields: [customerId], references: [id])
+  objections   String?
+  status       String      @default("NEW")
+  notes        String?
+  isDeleted    Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([phone])
+  @@index([status])
+  @@index([interestedIn])
+  @@map("leads")
+}
+
+// ============================================
+// Campaign — bulk calling campaign
+// ============================================
+model Campaign {
+  id             String         @id @default(cuid())
+  name           String
+  status         String         @default("ACTIVE")
+  totalCustomers Int            @default(0)
+  callsMade      Int            @default(0)
+  answeredCount  Int            @default(0)
+  isDeleted      Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  callLogs CallLog[]
+
+  @@map("campaigns")
+}
+
+// ============================================
+// Call event — granular event log per call
+// ============================================
+model CallEvent {
+  id        String   @id @default(cuid())
+  callSid   String
+  callLog   CallLog  @relation(fields: [callSid], references: [callSid])
+  eventType String   // call_started, greeting_played, utterance_received, ai_response_sent, escalation_triggered, call_ended
+  payload   String?
+  createdAt DateTime @default(now())
+
+  @@index([callSid])
+  @@index([eventType])
+  @@map("call_events")
+}
+
+
