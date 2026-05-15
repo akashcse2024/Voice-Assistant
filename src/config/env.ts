@@ -25,15 +25,14 @@ const envSchema = z.object({
   TWILIO_ACCOUNT_SID: z.string().default(''),
   TWILIO_AUTH_TOKEN: z.string().default(''),
   TWILIO_PHONE_NUMBER: z.string().default(''),
-  TWILIO_WEBHOOK_BASE_URL: z.string().default('http://localhost:3000'),
+  BASE_URL: z.string().default('http://localhost:3000'),
+  HUMAN_AGENT_NUMBER: z.string().default(''),
 
   // Deepgram (optional — only needed for voice pipeline)
   DEEPGRAM_API_KEY: z.string().default(''),
 
-  // Google Cloud TTS (optional — only needed for voice pipeline)
-  GOOGLE_APPLICATION_CREDENTIALS: z.string().default('./google-credentials.json'),
-  GOOGLE_TTS_VOICE_NAME: z.string().default('en-IN-Neural2-A'),
-  GOOGLE_TTS_LANGUAGE_CODE: z.string().default('en-IN'),
+  // Deepgram (optional — only needed for voice pipeline)
+  DEEPGRAM_API_KEY: z.string().default(''),
 
   // Groq (Primary AI Engine)
   GROQ_API_KEY: z.string().default(''),
@@ -73,5 +72,4 @@ export const isConfigured = {
   twilio: () => env.TWILIO_ACCOUNT_SID.length > 0 && env.TWILIO_AUTH_TOKEN.length > 0,
   deepgram: () => env.DEEPGRAM_API_KEY.length > 0,
   groq: () => env.GROQ_API_KEY.length > 0,
-  googleTts: () => env.GOOGLE_APPLICATION_CREDENTIALS.length > 0,
 };

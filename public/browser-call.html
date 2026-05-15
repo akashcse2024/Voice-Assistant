@@ -168,7 +168,9 @@
     @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
     #chat-window {
-      flex: 1;
+      height: calc(100vh - 320px); /* takes most of screen */
+      min-height: 350px;
+      max-height: 600px;
       width: 100%;
       background: var(--bg-secondary);
       border-radius: var(--radius);
@@ -183,17 +185,17 @@
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 12px; /* more spacing between bubbles */
       scroll-behavior: smooth;
     }
     #chat-history::-webkit-scrollbar { width: 4px; }
     #chat-history::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
     .bubble {
-      max-width: 80%;
-      padding: 12px 16px;
+      max-width: 78%;
+      padding: 14px 18px;
+      line-height: 1.6;
       font-size: 14px;
-      line-height: 1.5;
       position: relative;
       animation: fadeIn 0.3s ease;
     }
@@ -278,6 +280,58 @@
     #start-call-btn:hover { background: #00e699; transform: translateY(-2px); }
     #end-call-btn { background: var(--accent-red); color: white; display: none; }
     #end-call-btn:hover { background: #ff7070; transform: translateY(-2px); }
+
+    /* FAQ & Info Banner */
+    #info-banner {
+      background: #1e2a4a;
+      color: #a0c4ff;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 3px solid var(--accent-blue);
+    }
+
+    .faq-btn {
+      background: rgba(123, 111, 240, 0.12);
+      color: var(--accent-purple, #7B6FF0);
+      border: 1px solid rgba(123, 111, 240, 0.3);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .faq-btn:hover {
+      background: rgba(123, 111, 240, 0.25);
+      border-color: rgba(123, 111, 240, 0.6);
+      transform: translateY(-1px);
+    }
+    .faq-btn:active { transform: translateY(0px); opacity: 0.8; }
+
+    /* Speed Control */
+    .speed-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg-card);
+      padding: 8px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.05);
+      width: 100%;
+      justify-content: space-between;
+    }
+    .speed-control label { font-size: 12px; color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+    .speed-control input[type=range] {
+      flex: 1;
+      accent-color: var(--accent-purple);
+      cursor: pointer;
+    }
+    #speed-val { font-size: 12px; color: var(--accent-purple); font-weight: 700; width: 30px; }
   </style>
 </head>
 <body>
@@ -316,6 +370,15 @@
         <button class="toggle-btn" id="btn-tamil">தமிழ் Tamil</button>
       </div>
     </div>
+    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -8px; margin-bottom: 8px; text-align: center; width: 100%;">
+      Note: For <b>Pure Tamil</b> speech switch to Tamil mode. For <b>Tanglish</b>, English mode works fine.
+    </p>
+
+    <div class="speed-control">
+      <label>Playback Speed</label>
+      <input type="range" id="speed-slider" min="0.5" max="2.0" step="0.1" value="1.0">
+      <span id="speed-val">1.0x</span>
+    </div>
 
     <div id="status-bar">
       <span class="status-dot"></span>
@@ -325,7 +388,62 @@
     <div id="chat-window">
       <div id="chat-history"></div>
       <div id="live-transcript">You said: <span>...</span></div>
+      
+      <!-- Replace existing FAQ section with this -->
+      <button id="faq-toggle" onclick="toggleFAQ()" style="
+        width: 100%;
+        background: transparent;
+        border: 1px solid rgba(123,111,240,0.3);
+        border-radius: 8px;
+        color: #7B6FF0;
+        padding: 8px;
+        font-size: 13px;
+        cursor: pointer;
+        margin: 8px 0 0 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      ">
+        <span>💬</span>
+        <span id="faq-toggle-label">Quick Questions ▾</span>
+      </button>
+
+      <div id="faq-panel" style="
+        display: none;
+        padding: 10px;
+        background: rgba(26,26,53,0.95);
+        border-radius: 0 0 8px 8px;
+        border: 1px solid rgba(123,111,240,0.2);
+        border-top: none;
+        margin-bottom: 8px;
+      ">
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          <button class="faq-btn" onclick="askFAQ(this)">What does health insurance cover?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">Premium for health plan?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">How to make a claim?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">Is family covered?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">What is zero depreciation?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">What is term life insurance?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">How many cashless hospitals?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">What is waiting period?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">enna plan iruku?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">yevlo cost aagum?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">claim panna epdi?</button>
+          <button class="faq-btn" onclick="askFAQ(this)">family plan iruka?</button>
+        </div>
+      </div>
+
       <form class="input-row" id="text-form">
+        <button type="button" id="manual-mic-btn" style="
+          background: rgba(123, 111, 240, 0.1);
+          border: 1px solid rgba(123, 111, 240, 0.3);
+          border-radius: 10px;
+          padding: 0 12px;
+          color: var(--accent-purple);
+          cursor: pointer;
+          font-size: 18px;
+        ">🎙️</button>
         <input type="text" id="text-input" placeholder="Type your message..." autocomplete="off">
         <button type="submit" id="send-btn">Send</button>
       </form>
@@ -334,6 +452,45 @@
     <div class="call-controls">
       <button id="start-call-btn" class="control-btn">🎙️ Start Call</button>
       <button id="end-call-btn" class="control-btn">🔴 End Call</button>
+    </div>
+
+    <!-- New Telephony Dashboard -->
+    <div id="telephony-dashboard" style="
+      width: 100%;
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-top: 16px;
+      border: 1px solid rgba(123, 111, 240, 0.2);
+    ">
+      <h3 style="font-family: 'Outfit'; font-size: 16px; margin-bottom: 12px; color: var(--accent-purple);">📞 Outbound Telephony</h3>
+      
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="tel-phone" placeholder="+919988776655" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #000; color: #fff;">
+          <input type="text" id="tel-name" placeholder="Customer Name" style="flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #000; color: #fff;">
+        </div>
+        
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+          <select id="tel-agent" style="padding: 10px; border-radius: 8px; border: 1px solid #333; background: #000; color: #fff; flex: 1;">
+            <option value="Priya">Agent: Priya</option>
+            <option value="Arjun">Agent: Arjun</option>
+          </select>
+          <button id="tel-start-btn" style="flex: 1; padding: 10px; background: var(--accent-purple); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">Call Now</button>
+        </div>
+
+        <div style="border-top: 1px solid #333; padding-top: 10px; margin-top: 5px;">
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;">Bulk Campaign (Comma separated numbers)</p>
+          <textarea id="tel-bulk" placeholder="+919988776655, +918877665544" style="width: 100%; height: 60px; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #000; color: #fff; font-family: monospace; font-size: 12px;"></textarea>
+          <button id="tel-bulk-btn" style="width: 100%; margin-top: 8px; padding: 10px; background: transparent; color: var(--accent-purple); border: 1px solid var(--accent-purple); border-radius: 8px; font-weight: 700; cursor: pointer;">Start Campaign</button>
+        </div>
+
+        <div id="tel-status" style="font-size: 12px; color: var(--accent-green); margin-top: 5px; text-align: center;">Ready</div>
+      </div>
+      
+      <p style="font-size: 10px; color: #666; margin-top: 12px; line-height: 1.4;">
+        <b>Note:</b> During Twilio Free Trial, only verified numbers can be called. Every call starts with a trial disclaimer.
+      </p>
     </div>
   </main>
 
@@ -345,11 +502,95 @@ const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 let callActive = false;
 let priyaSpeaking = false;
+let isListening = false;
 let currentAgentName = 'Priya';
 let currentLanguage = 'english';
 let recognition = null;
 let conversationHistory = [];
 let lastUserMessage = '';
+let playbackSpeed = 1.0;
+let tamilVoiceWarningShown = false;
+let speakingTimeout = null;
+
+// Audio Context Unlocking for Chrome/Edge
+async function unlockAudioContext() {
+  console.log('Unlocking audio context...');
+  const silentAudio = new Audio(
+    'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA'
+  );
+  try {
+    await silentAudio.play();
+    silentAudio.pause();
+    console.log('Audio context unlocked successfully');
+  } catch(e) {
+    console.warn('Audio unlock failed — user may not hear responses:', e.message);
+  }
+}
+
+function detectLanguage(text) {
+  // Returns 'english' or 'tamil' only.
+  const hasTamilScript = /[\u0B80-\u0BFF]/.test(text);
+  
+  const tanglishWords = [
+    'enna', 'sollu', 'sari', 'illa', 'iruku', 'romba', 'nalla', 
+    'konjam', 'yevlo', 'evlo', 'venduma', 'vendam', 'epdi', 
+    'namba', 'machi', 'vanakkam', 'naan', 'unga'
+  ];
+  const lowercaseText = text.toLowerCase();
+  const isTanglish = tanglishWords.some(word => 
+    new RegExp('\\b' + word + '\\b').test(lowercaseText)
+  );
+  
+  if (hasTamilScript || isTanglish) return 'tamil';
+
+  return 'english';
+}
+
+// Barge-in Monitor Variables
+let audioContext = null;
+let micAnalyser = null;
+let micStream = null;
+let bargeInMonitor = null;
+let bargeInActive = false;
+
+async function startBargeInMonitor(onBargeIn) {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(micStream);
+    micAnalyser = audioContext.createAnalyser();
+    micAnalyser.fftSize = 512;
+    micAnalyser.smoothingTimeConstant = 0.3;
+    source.connect(micAnalyser);
+
+    const dataArray = new Uint8Array(micAnalyser.frequencyBinCount);
+    let silenceFrames = 0;
+    let triggered = false;
+
+    bargeInMonitor = setInterval(() => {
+      if (!priyaSpeaking || triggered) return;
+
+      micAnalyser.getByteFrequencyData(dataArray);
+      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+
+      // avg > 18 means user is speaking (adjust this number if too sensitive)
+      if (avg > 18) {
+        silenceFrames = 0;
+        triggered = true;
+        clearInterval(bargeInMonitor);
+        onBargeIn();
+      }
+    }, 80); // check every 80ms
+
+  } catch (err) {
+    console.error('Barge-in monitor failed:', err);
+  }
+}
+
+function stopBargeInMonitor() {
+  if (bargeInMonitor) clearInterval(bargeInMonitor);
+  bargeInActive = false;
+}
 
 // ============ UI HELPERS ============
 const elements = {
@@ -362,19 +603,48 @@ const elements = {
   startBtn: document.getElementById('start-call-btn'),
   endBtn: document.getElementById('end-call-btn'),
   textInput: document.getElementById('text-input'),
-  textForm: document.getElementById('text-form')
+  textForm: document.getElementById('text-form'),
+  speedSlider: document.getElementById('speed-slider'),
+  speedVal: document.getElementById('speed-val'),
+  faqSection: document.getElementById('faq-section')
 };
+
+// Pre-load voices as soon as possible
+window.speechSynthesis.getVoices();
+window.speechSynthesis.onvoiceschanged = () => {
+  console.log('Voices loaded:', window.speechSynthesis.getVoices().length);
+};
+
+function showInfoBanner(message) {
+  const existing = document.getElementById('info-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'info-banner';
+  banner.innerHTML = `<span>${message}</span>
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:#a0c4ff;cursor:pointer;font-size:16px;padding:0 0 0 12px">×</button>`;
+  elements.history.prepend(banner);
+}
+
+function toggleFAQ() {
+  const panel = document.getElementById('faq-panel');
+  const label = document.getElementById('faq-toggle-label');
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  label.textContent = isOpen ? 'Quick Questions ▾' : 'Quick Questions ▴';
+}
 
 function setAvatarState(state) {
   elements.avatar.className = `avatar-${state}`;
 }
 
-function updateStatus(state) {
+function updateStatus(state, extra = '') {
   const statusMap = {
     idle: 'Call ended',
     listening: 'Listening...',
     speaking: `${currentAgentName} is speaking...`,
-    thinking: 'Thinking...'
+    thinking: 'Thinking...',
+    error: 'Error: ' + extra
   };
   elements.statusDot.className = `status-dot ${state}`;
   elements.statusText.textContent = statusMap[state] || 'Ready';
@@ -390,56 +660,42 @@ function appendMessage(role, text) {
 }
 
 // ============ AI SERVICE (Groq) ============
-function buildSystemPrompt(agentName, languageMode) {
-  const tamilInstruction = languageMode === 'tamil'
-    ? `The user has selected Tamil mode. ALWAYS respond in Tanglish — 
-       natural Tamil and English mixed together in every sentence. 
-       Use words like nalla, romba, konjam, sari, illa, enna, sollu, 
-       yevlo, puriyuthu, venduma, iruku naturally within English sentences. 
-       Never respond in formal Tamil. Never respond in pure English when Tamil mode is on.
-       Example: "Namba Health Plus plan romba nalla iruku! 
-       Coverage 3 lakh from start aagum. Unga age enna?"`
-    : `Always respond in simple, warm Indian English.`;
+function validateAndCleanAIResponse(text, userMessage) {
+  const hasTamilScriptInResponse = /[\u0B80-\u0BFF]/.test(text);
+  const hasTamilScriptInInput = /[\u0B80-\u0BFF]/.test(userMessage);
+  
+  const isPureTamilMode = hasTamilScriptInInput;
+  
+  console.log(`Validation — Pure Tamil Mode: ${isPureTamilMode} | Response has Tamil script: ${hasTamilScriptInResponse}`);
 
-  return `You are ${agentName}, a warm and fast voice and chat assistant 
-for Vizza Insurance Company. You speak with real customers right now.
+  if (isPureTamilMode) {
+    // In Pure Tamil mode, Tamil script is allowed.
+    return text;
+  }
 
-[SPEED RULE — MOST IMPORTANT]
-Keep EVERY response under 2 sentences unless customer asks for full details.
-After every reply end with ONE short question. Never monologue.
+  if (hasTamilScriptInResponse) {
+    // For Tanglish or English mode, Tamil script is NOT allowed.
+    console.warn(`Validation — WARNING: AI returned Tamil script in non-script mode. Stripping...`);
+    const stripped = text.replace(/[\u0B80-\u0BFF]/g, '').trim();
 
-[PERSONALITY]
-Warm, confident, fast, genuinely helpful. Sound like a smart young advisor.
-Natural Indian conversational style. Use: Sure! Got it! Absolutely!
-NEVER use bullet points, asterisks, dashes, numbered lists, or markdown.
-Plain spoken words only — your text is read aloud by a voice engine.
+    if (stripped.length < text.length * 0.4) {
+      console.warn('Validation — FAILURE: Too much Tamil script removed.');
+      return null; 
+    }
+    return stripped;
+  }
 
-[LANGUAGE]
-${tamilInstruction}
-
-[VIZZA INSURANCE PRODUCTS]
-Product 1 — Vizza Health Plus: hospitalisation, 3L-1Cr sum insured, premium from 599/month, 8000+ hospitals.
-Product 2 — Vizza Drive Safe: Motor insurance, claims in 7 days, 24h roadside.
-Product 3 — Vizza Life Secure: Term life up to 5Cr, premium from 500/month.
-Product 4 — Vizza Home Guard: Structure & contents, from 2000/year.
-
-[CALL FLOW]
-DISCOVERY — ask which area interests them.
-PITCH — share one benefit, ask if they want more.
-REJECTION FLOW — if no, ask if already covered or not right time. End warmly.
-
-[STRICT RULES]
-NEVER invent policy details. Plain text only. Max 2 sentences.`;
+  return text;
 }
 
-async function callGroqAI(conversationHistory, agentName, languageMode) {
+async function callGroqAI(conversationHistory, agentName, detectedLang) {
   const response = await fetch('/test/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       messages: conversationHistory,
       agentName: agentName,
-      language: languageMode
+      language: detectedLang
     })
   });
 
@@ -452,6 +708,9 @@ async function callGroqAI(conversationHistory, agentName, languageMode) {
 
 async function handleUserInput(userText) {
   if (!userText || userText.trim() === '') return;
+  const detectedLang = detectLanguage(userText);
+  console.log(`User input: "${userText}" | Detected Language: ${detectedLang}`);
+
   lastUserMessage = userText.trim();
   appendMessage('user', userText);
   updateStatus('thinking');
@@ -459,149 +718,339 @@ async function handleUserInput(userText) {
   conversationHistory.push({ role: 'user', content: userText });
 
   try {
-    const aiReply = await callGroqAI(conversationHistory, currentAgentName, currentLanguage);
-    conversationHistory.push({ role: 'assistant', content: aiReply });
-    appendMessage('assistant', aiReply);
-    speakResponse(aiReply);
+    let aiReply = await callGroqAI(conversationHistory, currentAgentName, detectedLang);
+    console.log(`Raw AI Response: "${aiReply}"`);
+
+    let cleanedReply = validateAndCleanAIResponse(aiReply, userText);
+
+    // RETRY LOGIC for Tanglish/English if AI failed to avoid Tamil script
+    if (cleanedReply === null) {
+      console.log('RETRY — Adding stricter instruction for second attempt.');
+      const retryHistory = [
+        ...conversationHistory,
+        { role: 'assistant', content: aiReply },
+        { role: 'system', content: 'Your last response contained Tamil script characters. This is not allowed. Respond ONLY in English letters. Do not use characters like வ, ண, க, ம.' }
+      ];
+      aiReply = await callGroqAI(retryHistory, currentAgentName, detectedLang);
+      cleanedReply = validateAndCleanAIResponse(aiReply, userText) || 'Oru nimisham — let me explain that again in simple words.';
+    }
+
+    conversationHistory.push({ role: 'assistant', content: cleanedReply });
+    appendMessage('assistant', cleanedReply);
+    speakWithEdgeTTS(cleanedReply);
   } catch (err) {
-    console.error('FULL ERROR OBJECT:', err);
-    console.error('ERROR MESSAGE:', err.message);
-    appendMessage('assistant', '[DEBUG: ' + err.message + ']');
-    
-    if (err.message.toLowerCase().includes('rate limit')) {
-      setTimeout(() => { conversationHistory.pop(); handleUserInput(lastUserMessage); }, 35000);
-    }
+    console.error('AI Error:', err);
+    appendMessage('assistant', '[Error: ' + err.message + ']');
+    setAvatarState('idle');
+    updateStatus('idle');
+    stopListening();
   }
 }
 
-// ============ SPEECH ============
-function startListening() {
-  if (!callActive || priyaSpeaking) return;
-  
-  if (!recognition) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.error('Speech recognition not supported in this browser.');
-      return;
-    }
-    
-    recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
+function tanglishToPhonetic(text) {
+  if (currentLanguage !== 'tamil') return text;
 
-    recognition.onstart = () => {
-      setAvatarState('listening');
-      updateStatus('listening');
-      elements.liveTranscript.style.display = 'block';
-      elements.liveSpan.textContent = '...';
-    };
+  const phonetics = {
+    'romba': 'rowm-ba', 'nalla': 'nul-la', 'konjam': 'con-jum', 'sari': 'suh-ree',
+    'illa': 'il-la', 'iruku': 'i-roo-ku', 'irukku': 'i-rook-ku', 'enna': 'en-na',
+    'sollu': 'sol-lu', 'solla': 'sol-la', 'venduma': 'ven-du-ma', 'vendam': 'ven-dum',
+    'puriyuthu': 'pu-ri-yu-thu', 'puriyala': 'pu-ri-ya-la', 'theriyuma': 'the-ri-yu-ma',
+    'theriyuthu': 'the-ri-yu-thu', 'yevlo': 'yev-lo', 'evlo': 'ev-lo', 'epdi': 'ep-di',
+    'eppo': 'ep-po', 'paisa': 'pie-sa', 'maasam': 'maa-sum', 'varusham': 'va-ru-shum',
+    'namba': 'num-ba', 'unga': 'un-ga', 'enga': 'en-ga', 'inga': 'in-ga'
+  };
 
-    recognition.onresult = (e) => {
-      let f = ''; let i = '';
-      for (let j = e.resultIndex; j < e.results.length; j++) {
-        if (e.results[j].isFinal) f += e.results[j][0].transcript;
-        else i += e.results[j][0].transcript;
-      }
-      elements.liveSpan.textContent = i || f;
-      if (f) {
-        try { recognition.stop(); } catch(err) {}
-        handleUserInput(f.trim());
-      }
-    };
-
-    recognition.onerror = (e) => {
-      if (e.error !== 'no-speech' && e.error !== 'aborted') {
-        console.error('STT Error:', e.error);
-      }
-    };
-
-    recognition.onend = () => {
-      if (callActive && !priyaSpeaking) {
-        setTimeout(startListening, 300);
-      }
-    };
-  }
-
-  recognition.lang = currentLanguage === 'tamil' ? 'ta-IN' : 'en-IN';
-  
-  try {
-    recognition.start();
-  } catch (e) {}
+  let result = text;
+  Object.entries(phonetics).forEach(([tamil, phonetic]) => {
+    const regex = new RegExp('\\b' + tamil + '\\b', 'gi');
+    result = result.replace(regex, phonetic);
+  });
+  return result;
 }
 
-function speakResponse(text) {
+async function speakWithEdgeTTS(text) {
   window.speechSynthesis.cancel();
+  stopListening();
   priyaSpeaking = true;
   setAvatarState('speaking');
   updateStatus('speaking');
-  
-  if (recognition) { try { recognition.stop(); } catch(e) {} }
 
-  const sentences = text.match(/[^.!?।]+[.!?।]*/g) || [text];
+  // Select TTS voice based on RESPONSE content
+  const hasTamilScript = /[\u0B80-\u0BFF]/.test(text);
+  const ttsMode = hasTamilScript ? 'tamil' : 'english';
+  
+  console.log(`TTS Selection — Has Tamil script: ${hasTamilScript} | Using Mode: ${ttsMode}`);
+
+  try {
+    console.log(`Requesting TTS for: "${text.substring(0, 30)}..."`);
+    const response = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: text,
+        agentName: currentAgentName,
+        languageMode: ttsMode
+      })
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      console.warn('Backend TTS error status:', response.status, data.error);
+      speakResponse(text); 
+      return;
+    }
+
+    const audioBlob = await response.blob();
+    console.log('TTS Blob received:', audioBlob.size, 'bytes');
+
+    if (audioBlob.size === 0) {
+      console.error('Empty audio blob received from TTS');
+      speakResponse(text);
+      return;
+    }
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+    let bargedIn = false;
+
+    // Safety timeout: stop speaking after 30 seconds max
+    if (speakingTimeout) clearTimeout(speakingTimeout);
+    speakingTimeout = setTimeout(() => {
+      if (priyaSpeaking) {
+        console.warn('Speaking safety timeout reached.');
+        audio.pause();
+        onSpeakingFinished();
+      }
+    }, 30000);
+
+    function onSpeakingFinished() {
+      if (speakingTimeout) clearTimeout(speakingTimeout);
+      speakingTimeout = null;
+      if (bargedIn) return;
+
+      stopBargeInMonitor();
+      URL.revokeObjectURL(audioUrl);
+      priyaSpeaking = false;
+      
+      // Wait 500ms before starting recognition for stability on Windows
+      setTimeout(() => {
+        if (callActive && !priyaSpeaking) startListening();
+      }, 500);
+    }
+
+    // START barge-in monitor before audio plays
+    await startBargeInMonitor(() => {
+      if (!bargedIn) {
+        bargedIn = true;
+        audio.pause();
+        audio.currentTime = 0;
+        URL.revokeObjectURL(audioUrl);
+        stopBargeInMonitor();
+        priyaSpeaking = false;
+        
+        if (speakingTimeout) clearTimeout(speakingTimeout);
+        speakingTimeout = null;
+
+        // Give 300ms for mic to clear then start STT
+        setTimeout(() => {
+          if (callActive) startListening();
+        }, 300);
+      }
+    });
+
+    audio.onended = onSpeakingFinished;
+    audio.onerror = () => {
+      console.error('Audio playback error');
+      onSpeakingFinished();
+    };
+
+    await audio.play();
+
+  } catch (err) {
+    console.error('Edge TTS error:', err);
+    speakResponse(text); // fallback to browser TTS
+  }
+}
+
+// ============ FALLBACK SPEECH (Browser TTS) ============
+let currentUtterance = null;
+let bargeInDetected = false;
+
+function speakResponse(text) {
+  window.speechSynthesis.cancel();
+  stopListening();
+  currentUtterance = null;
+  bargeInDetected = false;
+  priyaSpeaking = true;
+  setAvatarState('speaking');
+  updateStatus('speaking');
+
+  const processedText = currentLanguage === 'tamil' ? tanglishToPhonetic(text) : text;
+  const sentences = processedText.match(/[^.!?।]+[.!?।]*/g) || [processedText];
   let index = 0;
 
   function speakNext() {
-    if (index >= sentences.length || !callActive) {
-      priyaSpeaking = false;
-      startListening();
+    if (bargeInDetected || index >= sentences.length || !callActive) {
+      if (!bargeInDetected) {
+        priyaSpeaking = false;
+        setTimeout(() => { if (callActive) startListening(); }, 500);
+      }
       return;
     }
+
     const sentence = sentences[index].trim();
     if (!sentence) { index++; speakNext(); return; }
 
-    const utterance = new SpeechSynthesisUtterance(sentence);
-    utterance.lang = currentLanguage === 'tamil' ? 'ta-IN' : 'en-IN';
-
-    if (currentAgentName === 'Priya') {
-      utterance.pitch = 1.4;
-      utterance.rate = 1.25;
-    } else {
-      utterance.pitch = 0.6;
-      utterance.rate = 1.15;
-    }
-
-    const voices = speechSynthesis.getVoices();
-    let selectedVoice;
-    if (currentLanguage === 'tamil') {
-      selectedVoice = voices.find(v => v.lang === 'ta-IN' || v.lang === 'ta');
-    }
-    if (!selectedVoice) {
-      if (currentAgentName === 'Priya') {
-        selectedVoice = voices.find(v => v.lang === 'en-IN') || voices.find(v => v.name.toLowerCase().includes('zira')) || voices[0];
-      } else {
-        selectedVoice = voices.find(v => v.name.toLowerCase().includes('david')) || voices.find(v => v.name.toLowerCase().includes('alex')) || voices[1] || voices[0];
-      }
-    }
-    if (selectedVoice) utterance.voice = selectedVoice;
-    utterance.onend = () => { index++; speakNext(); };
-    utterance.onerror = () => { index++; speakNext(); };
-    window.speechSynthesis.speak(utterance);
+    currentUtterance = new SpeechSynthesisUtterance(sentence);
+    applyBestVoice(currentUtterance);
+    currentUtterance.onend = () => { if (!bargeInDetected) { index++; speakNext(); } };
+    currentUtterance.onerror = () => { index++; speakNext(); };
+    window.speechSynthesis.speak(currentUtterance);
   }
   speakNext();
 }
 
+function applyBestVoice(utterance) {
+  let voices = window.speechSynthesis.getVoices();
+  if (voices.length === 0) {
+    window.speechSynthesis.onvoiceschanged = () => selectVoice(utterance, window.speechSynthesis.getVoices());
+  } else {
+    selectVoice(utterance, voices);
+  }
+}
+
+function selectVoice(utterance, voices) {
+  let selectedVoice = null;
+
+  if (currentLanguage === 'tamil') {
+    selectedVoice = voices.find(v => v.lang === 'ta-IN' || v.lang === 'ta')
+      || voices.find(v => v.name.toLowerCase().includes('tamil'));
+    
+    if (selectedVoice) {
+      utterance.lang = 'ta-IN';
+      utterance.rate = playbackSpeed * 0.9;
+    } else {
+      selectedVoice = voices.find(v => v.lang === 'en-IN') || voices[0];
+      utterance.lang = 'en-IN';
+      utterance.rate = playbackSpeed;
+      if (!tamilVoiceWarningShown) {
+        tamilVoiceWarningShown = true;
+        showInfoBanner('Tamil voice not found. Using Indian English fallback.');
+      }
+    }
+  } else {
+    if (currentAgentName === 'Arjun') {
+      selectedVoice = voices.find(v => v.name.includes('David')) || voices.find(v => v.name.includes('Mark')) || voices.find(v => v.lang === 'en-IN' && !v.name.toLowerCase().includes('female')) || voices[0];
+      utterance.pitch = 0.5;
+    } else {
+      selectedVoice = voices.find(v => v.lang === 'en-IN') || voices.find(v => v.name.includes('Zira')) || voices[0];
+      utterance.pitch = 1.35;
+    }
+    utterance.lang = 'en-IN';
+    utterance.rate = playbackSpeed * (currentAgentName === 'Priya' ? 1.2 : 1.05);
+  }
+
+  if (selectedVoice) utterance.voice = selectedVoice;
+}
+
+// ============ SPEECH ============
+function startListening() {
+  if (!callActive || priyaSpeaking || isListening) return;
+  
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return;
+
+  // Re-create recognition object each time to avoid Windows Chrome bugs
+  recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = currentLanguage === 'tamil' ? 'ta-IN' : 'en-IN';
+
+  recognition.onstart = () => {
+    isListening = true;
+    setAvatarState('listening');
+    updateStatus('listening');
+    elements.liveTranscript.style.display = 'block';
+    elements.liveSpan.textContent = '...';
+  };
+
+  recognition.onresult = (e) => {
+    let f = ''; let i = '';
+    for (let j = e.resultIndex; j < e.results.length; j++) {
+      if (e.results[j].isFinal) f += e.results[j][0].transcript;
+      else i += e.results[j][0].transcript;
+    }
+    elements.liveSpan.textContent = i || f;
+    if (f) {
+      stopListening();
+      handleUserInput(f.trim());
+    }
+  };
+
+  recognition.onerror = (event) => {
+    console.error('Speech recognition error:', event.error);
+    isListening = false;
+    
+    if (event.error === 'no-speech') {
+      setTimeout(() => { if (callActive && !priyaSpeaking) startListening(); }, 300);
+    } else if (event.error === 'audio-capture') {
+      updateStatus('error', 'Microphone not accessible');
+    } else if (event.error === 'not-allowed') {
+      updateStatus('error', 'Microphone permission denied');
+    } else {
+      setTimeout(() => { if (callActive && !priyaSpeaking) startListening(); }, 1000);
+    }
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    // Auto-restart if call is still active and Priya is not speaking
+    setTimeout(() => {
+      if (callActive && !priyaSpeaking && !isListening) startListening();
+    }, 400);
+  };
+
+  try { 
+    recognition.start(); 
+  } catch (e) {
+    console.error('Failed to start recognition:', e);
+    isListening = false;
+  }
+}
+
+function stopListening() {
+  isListening = false;
+  if (recognition) {
+    try { recognition.stop(); } catch (e) {}
+  }
+}
+
 // ============ EVENTS ============
 elements.startBtn.onclick = async () => {
+  await unlockAudioContext();
   try { await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { alert('Mic access denied'); return; }
   callActive = true;
   conversationHistory = [];
   elements.history.innerHTML = '';
   elements.startBtn.style.display = 'none';
   elements.endBtn.style.display = 'inline-block';
+  elements.faqSection.style.display = 'block';
   const greeting = `Hello! I'm ${currentAgentName} from Vizza Insurance. Do you have 2 minutes?`;
   conversationHistory.push({ role: 'assistant', content: greeting });
   appendMessage('assistant', greeting);
-  speakResponse(greeting);
+  speakWithEdgeTTS(greeting);
 };
 
 elements.endBtn.onclick = () => {
   callActive = false;
   window.speechSynthesis.cancel();
-  if (recognition) recognition.stop();
+  stopListening();
+  if (speakingTimeout) clearTimeout(speakingTimeout);
+  speakingTimeout = null;
   setAvatarState('idle');
   updateStatus('idle');
   elements.startBtn.style.display = 'inline-block';
   elements.endBtn.style.display = 'none';
+  elements.faqSection.style.display = 'none';
 };
 
 elements.textForm.onsubmit = (e) => {
@@ -614,34 +1063,155 @@ elements.textForm.onsubmit = (e) => {
 
 // Toggle Handlers
 document.getElementById('btn-priya').addEventListener('click', () => {
+  window.speechSynthesis.cancel();
+  priyaSpeaking = false;
   currentAgentName = 'Priya';
   document.getElementById('btn-priya').classList.add('active');
   document.getElementById('btn-arjun').classList.remove('active');
   document.querySelectorAll('.agent-name-label').forEach(el => el.textContent = 'Priya');
+  speakWithEdgeTTS("Hi, I'm Priya. How can I help you?");
 });
 
 document.getElementById('btn-arjun').addEventListener('click', () => {
+  window.speechSynthesis.cancel();
+  priyaSpeaking = false;
   currentAgentName = 'Arjun';
   document.getElementById('btn-arjun').classList.add('active');
   document.getElementById('btn-priya').classList.remove('active');
   document.querySelectorAll('.agent-name-label').forEach(el => el.textContent = 'Arjun');
+  speakWithEdgeTTS("Hi, I'm Arjun. How can I help you today?");
 });
 
 document.getElementById('btn-english').addEventListener('click', () => {
+  window.speechSynthesis.cancel();
   currentLanguage = 'english';
   if (recognition) recognition.lang = 'en-IN';
   document.getElementById('btn-english').classList.add('active');
   document.getElementById('btn-tamil').classList.remove('active');
+  speakWithEdgeTTS("Switched to English mode.");
 });
 
 document.getElementById('btn-tamil').addEventListener('click', () => {
+  window.speechSynthesis.cancel();
   currentLanguage = 'tamil';
   if (recognition) recognition.lang = 'ta-IN';
   document.getElementById('btn-tamil').classList.add('active');
   document.getElementById('btn-english').classList.remove('active');
+  speakWithEdgeTTS("Tamil mode ready. Naan Tamil la pesuren!");
 });
 
+elements.speedSlider.oninput = (e) => {
+  playbackSpeed = parseFloat(e.target.value);
+  elements.speedVal.textContent = playbackSpeed.toFixed(1) + 'x';
+};
+
+document.getElementById('manual-mic-btn').onclick = () => {
+  if (callActive && !priyaSpeaking) {
+    startListening();
+  } else if (!callActive) {
+    elements.startBtn.click();
+  }
+};
+
+function askFAQ(button) {
+  const question = button.textContent.trim();
+  button.style.background = 'rgba(123, 111, 240, 0.5)';
+  setTimeout(() => { button.style.background = ''; }, 600);
+
+  if (!callActive) {
+    elements.startBtn.click();
+    setTimeout(() => handleUserInput(question), 1500);
+  } else {
+    handleUserInput(question);
+  }
+}
+
 speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+
+// ============ TELEPHONY HANDLERS ============
+const telPhone = document.getElementById('tel-phone');
+const telName = document.getElementById('tel-name');
+const telAgent = document.getElementById('tel-agent');
+const telStartBtn = document.getElementById('tel-start-btn');
+const telBulk = document.getElementById('tel-bulk');
+const telBulkBtn = document.getElementById('tel-bulk-btn');
+const telStatus = document.getElementById('tel-status');
+
+telStartBtn.onclick = async () => {
+  const phone = telPhone.value.trim();
+  const name = telName.value.trim();
+  const agent = telAgent.value;
+
+  if (!phone) {
+    telStatus.textContent = "Error: Phone number required";
+    telStatus.style.color = "var(--accent-red)";
+    return;
+  }
+
+  telStatus.textContent = "Initiating call...";
+  telStatus.style.color = "var(--accent-orange)";
+  telStartBtn.disabled = true;
+
+  try {
+    const response = await fetch('/api/call/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, name, agent })
+    });
+    const data = await response.json();
+    if (data.success) {
+      telStatus.textContent = "Call initiated! Check your phone.";
+      telStatus.style.color = "var(--accent-green)";
+    } else {
+      telStatus.textContent = "Failed: " + (data.error || "Unknown error");
+      telStatus.style.color = "var(--accent-red)";
+    }
+  } catch (err) {
+    telStatus.textContent = "Error: " + err.message;
+    telStatus.style.color = "var(--accent-red)";
+  } finally {
+    telStartBtn.disabled = false;
+  }
+};
+
+telBulkBtn.onclick = async () => {
+  const bulkText = telBulk.value.trim();
+  const agent = telAgent.value;
+
+  if (!bulkText) {
+    telStatus.textContent = "Error: Numbers required";
+    telStatus.style.color = "var(--accent-red)";
+    return;
+  }
+
+  const numbers = bulkText.split(',').map(n => n.trim()).filter(n => n.length > 0);
+  const customers = numbers.map(n => ({ phone: n }));
+
+  telStatus.textContent = `Starting campaign for ${customers.length} numbers...`;
+  telStatus.style.color = "var(--accent-orange)";
+  telBulkBtn.disabled = true;
+
+  try {
+    const response = await fetch('/api/call/campaign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customers, agent })
+    });
+    const data = await response.json();
+    if (data.success) {
+      telStatus.textContent = "Campaign started!";
+      telStatus.style.color = "var(--accent-green)";
+    } else {
+      telStatus.textContent = "Failed: " + (data.error || "Unknown error");
+      telStatus.style.color = "var(--accent-red)";
+    }
+  } catch (err) {
+    telStatus.textContent = "Error: " + err.message;
+    telStatus.style.color = "var(--accent-red)";
+  } finally {
+    telBulkBtn.disabled = false;
+  }
+};
 </script>
 </body>
 </html>

@@ -67,12 +67,17 @@ export function handleBrowserStream(ws: WebSocket): void {
       }
 
       // data is WebM audio from browser microphone
+      // data is WebM audio from browser microphone
       if (sttStream?.isActive()) {
         const session = sessionManager.get(callSid);
+        
+        // ECHO CANCELLATION FIX: 
+        // If Priya is speaking, completely ignore the microphone data
+        // so she doesn't transcribe her own voice.
         if (session?.isPlayingAudio) {
-          log.debug({ callSid }, 'Barge-in detected (Browser)');
-          sessionManager.setPlayingAudio(callSid, false);
+          return; // <-- This instantly drops the audio chunk
         }
+        
         sttStream.sendAudio(data);
       }
     } catch (error) {

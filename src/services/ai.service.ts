@@ -13,48 +13,97 @@ const log = createModuleLogger('ai-service');
 const groq = new Groq({ apiKey: env.GROQ_API_KEY });
 
 /**
- * Shared System Prompt Builder
+ * Automatic Language Detection
  */
-export function buildSystemPrompt(agentName: string, languageMode: 'english' | 'tamil' = 'english') {
-  const tamilInstruction = languageMode === 'tamil'
-    ? `The user has selected Tamil mode. ALWAYS respond in Tanglish — 
-       natural Tamil and English mixed together in every sentence. 
-       Use words like nalla, romba, konjam, sari, illa, enna, sollu, 
-       yevlo, puriyuthu, venduma, iruku naturally within English sentences. 
-       Never respond in formal Tamil. Never respond in pure English when Tamil mode is on.
-       Example: "Namba Health Plus plan romba nalla iruku! 
-       Coverage 3 lakh from start aagum. Unga age enna?"`
-    : `Always respond in simple, warm Indian English.`;
+/**
+ * Automatic Language Detection — Returns 'english' or 'tamil' only.
+ */
+export function detectLanguage(text: string): 'english' | 'tamil' {
+  // Check for Tamil Unicode characters OR Tanglish keywords
+  const hasTamilScript = /[\u0B80-\u0BFF]/.test(text);
 
-  return `You are ${agentName}, a warm and fast voice and chat assistant 
-for Vizza Insurance Company. You speak with real customers right now.
+  const tanglishWords = [
+    'enna', 'sollu', 'sari', 'illa', 'iruku', 'romba', 'nalla',
+    'konjam', 'yevlo', 'evlo', 'venduma', 'vendam', 'epdi',
+    'namba', 'machi', 'vanakkam', 'naan', 'unga'
+  ];
+  const lowercaseText = text.toLowerCase();
+  const isTanglish = tanglishWords.some(word =>
+    new RegExp(`\\b${word}\\b`).test(lowercaseText)
+  );
 
-[SPEED RULE — MOST IMPORTANT]
-Keep EVERY response under 2 sentences unless customer asks for full details.
-After every reply end with ONE short question. Never monologue.
+  if (hasTamilScript || isTanglish) return 'tamil';
 
-[PERSONALITY]
-Warm, confident, fast, genuinely helpful. Sound like a smart young advisor.
-Natural Indian conversational style. Use: Sure! Got it! Absolutely!
-NEVER use bullet points, asterisks, dashes, numbered lists, or markdown.
-Plain spoken words only — your text is read aloud by a voice engine.
+  return 'english';
+}
 
-[LANGUAGE]
-${tamilInstruction}
+/**
+ * Shared System Prompt Builder — Tri-modal Support
+ */
+export function buildSystemPrompt(
+  agentName: string,
+  languageMode: 'english' | 'tamil',
+  currentUserMessage: string = ''
+) {
+  let subMode = 'english';
+  if (languageMode === 'tamil') {
+    const hasTamilScript = /[\u0B80-\u0BFF]/.test(currentUserMessage);
+    subMode = hasTamilScript ? 'tamil-script' : 'tanglish';
+  }
+
+  console.log(`Building prompt — mode: ${languageMode} | sub-mode: ${subMode}`);
+
+  let languageInstruction = '';
+
+  if (subMode === 'tamil-script') {
+    languageInstruction = `
+[PURE TAMIL MODE]
+- User writes in Tamil script. You MUST reply entirely in Tamil script.
+- Write your full answer in Tamil.
+- Use natural conversational Tamil, not formal written Tamil.
+- Insurance terms like premium, policy, cover, claim can stay in English but write everything else in Tamil script.
+- Example:
+  User: "ஹெல்த் இன்சுரன்ஸ் பத்தி சொல்லு"
+  Agent: "ஹெல்த் பிளஸ் பிளானில் மருத்துவமனை சேர்க்கை, அறுவை சிகிச்சை, மருந்துகள் எல்லாம் cover ஆகும். உங்கள் குடும்பத்திற்கு plan தேவையா?"
+- Example:
+  User: "காப்பீடு எவ்வளவு ஆகும்"
+  Agent: "உங்கள் வயது மற்றும் family size பொறுத்து cost மாறும். தோராயமாக மாதம் 599 ரூபாய் முதல் தொடங்கும். உங்கள் வயது என்ன?"
+`;
+  } else if (subMode === 'tanglish') {
+    languageInstruction = `
+[TANGLISH MODE]
+- User speaks in Tanglish. Respond in Tanglish (Tamil words written in English letters).
+- STRICT RULE: NEVER use Tamil script characters.
+- Example:
+  User: "enna cover iruku health plan la"
+  Agent: "Health Plus la hospitalisation, surgery, medicines ellame cover aagum. Unga family ku plan venum-a?"
+`;
+  } else {
+    languageInstruction = `
+[ENGLISH MODE]
+- Respond in simple, warm Indian English.
+- Example: 
+  User: "what does health insurance cover"
+  Agent: "Health Plus covers hospitalisation, surgery, daycare procedures and ambulance charges. Would you like to know about the premium?"
+`;
+  }
+
+  return `You are ${agentName}, a warm and fast voice assistant for Vizza Insurance.
+Your CRITICAL rule is to match the user's language mode EXACTLY.
+
+${languageInstruction}
 
 [VIZZA INSURANCE PRODUCTS]
-Product 1 — Vizza Health Plus: hospitalisation, 3L-1Cr sum insured, premium from 599/month, 8000+ hospitals.
-Product 2 — Vizza Drive Safe: Motor insurance, claims in 7 days, 24h roadside.
-Product 3 — Vizza Life Secure: Term life up to 5Cr, premium from 500/month.
-Product 4 — Vizza Home Guard: Home insurance, from 2000/year.
-
-[CALL FLOW]
-DISCOVERY — ask which area interests them.
-PITCH — share one benefit, ask if they want more detail.
-REJECTION FLOW — if no, ask if already covered or not right time. End warmly.
+- Vizza Health Plus: hospitalisation, 3L-1Cr, from 599/month.
+- Vizza Drive Safe: Motor insurance, claims in 7 days.
+- Vizza Life Secure: Term life up to 5Cr, from 500/month.
+- Vizza Home Guard: Home insurance, from 2000/year.
 
 [STRICT RULES]
-NEVER invent details. Max 2 sentences. No markdown.`;
+- Max ${languageMode === 'tamil' ? '4' : '3'} sentences per response.
+- End with a short question.
+- Match the user's detected mode exactly. Never mix modes.
+- Plain text only (no markdown, no bold, no lists).`;
 }
 
 /**
@@ -66,7 +115,8 @@ export async function generateChatResponse(
   language: 'english' | 'tamil' = 'english'
 ): Promise<string> {
   try {
-    const systemPrompt = buildSystemPrompt(agentName, language);
+    const lastUserMessage = messages.filter(m => m.role === 'user').pop()?.content || '';
+    const systemPrompt = buildSystemPrompt(agentName, language, lastUserMessage);
 
     const completion = await groq.chat.completions.create({
       model: env.GROQ_MODEL,
@@ -74,8 +124,9 @@ export async function generateChatResponse(
         { role: 'system', content: systemPrompt },
         ...messages
       ],
-      max_tokens: 120,
+      max_tokens: language === 'tamil' ? 300 : 150,
       temperature: 0.7,
+      stop: [".", "?", "!", "।"]
     });
 
     return completion.choices[0]?.message?.content?.trim() || '';

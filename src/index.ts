@@ -10,6 +10,7 @@ import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import websocket from '@fastify/websocket';
 import fastifyStatic from '@fastify/static';
+import formbody from '@fastify/formbody';
 import path from 'path';
 import { env, isConfigured } from './config/env';
 import { connectDatabase, disconnectDatabase } from './db/prisma';
@@ -19,6 +20,7 @@ import { customerRoutes } from './routes/customer.routes';
 import { leadRoutes } from './routes/lead.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
 import { testRoutes } from './routes/test.routes';
+import { ttsRoutes } from './routes/tts.routes';
 import { handleBrowserStream } from './pipeline/browser-stream';
 import { logger } from './utils/logger';
 
@@ -32,6 +34,7 @@ async function main() {
   await fastify.register(cors, { origin: true, credentials: true });
   await fastify.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
   await fastify.register(websocket);
+  await fastify.register(formbody);
 
   // ========== Error Handler ==========
   fastify.setErrorHandler(errorHandler);
@@ -59,11 +62,12 @@ async function main() {
   });
 
   // ========== Routes ==========
-  await fastify.register(callRoutes, { prefix: '/call' });
+  await fastify.register(callRoutes, { prefix: '/api/call' });
   await fastify.register(customerRoutes, { prefix: '/customers' });
   await fastify.register(leadRoutes, { prefix: '/leads' });
   await fastify.register(dashboardRoutes, { prefix: '/dashboard' });
   await fastify.register(testRoutes, { prefix: '/test' });
+  await fastify.register(ttsRoutes, { prefix: '/api' });
 
   // ========== WebSocket ==========
   fastify.register(async function (app) {
