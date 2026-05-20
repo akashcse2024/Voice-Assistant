@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { MsEdgeTTS } from 'msedge-tts';
+import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 import { createModuleLogger } from '../utils/logger';
 
 const log = createModuleLogger('tts-routes');
@@ -54,7 +54,7 @@ export async function ttsRoutes(fastify: FastifyInstance): Promise<void> {
       log.info({ voice: selectedVoice, text: cleanedText.substring(0, 50) }, 'TTS Request Processing');
 
       const tts = new MsEdgeTTS();
-      await tts.setMetadata(selectedVoice, "audio-24khz-48kbitrate-mono-mp3");
+      await tts.setMetadata(selectedVoice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
       
       const { audioStream } = tts.toStream(cleanedText);
       

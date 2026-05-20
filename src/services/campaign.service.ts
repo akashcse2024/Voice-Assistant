@@ -10,8 +10,10 @@ import { sessionManager } from './session.service';
 import { isWithinCallingHours } from '../utils/time-window';
 import { createModuleLogger } from '../utils/logger';
 import { maskPhone } from '../utils/pii-mask';
+import twilio from 'twilio';
 
 const log = createModuleLogger('campaign-service');
+const twilioClient = twilio(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN);
 
 // Simple in-memory queue for campaigns (can be upgraded to BullMQ with Redis)
 const activeCampaigns: Map<string, { paused: boolean; abortController: AbortController }> =
@@ -22,7 +24,7 @@ const activeCampaigns: Map<string, { paused: boolean; abortController: AbortCont
  */
 export async function startCampaign(params: {
   name: string;
-  customers: Array<{ phone: string; name?: string }>;
+  customers: Array<{ customerPhone: string; customerName?: string }>;
 }): Promise<{ campaignId: string; totalCustomers: number }> {
   // Create campaign record
   const campaign = await prisma.campaign.create({
@@ -57,7 +59,7 @@ export async function startCampaign(params: {
  */
 async function dialCampaignCustomers(
   campaignId: string,
-  customers: Array<{ phone: string; name?: string }>,
+  customers: Array<{ customerPhone: string; customerName?: string }>,
   signal: AbortSignal
 ): Promise<void> {
   for (let i = 0; i < customers.length; i++) {
@@ -79,12 +81,12 @@ async function dialCampaignCustomers(
     try {
       // Check DNC flag
       const dbCustomer = await prisma.customer.findUnique({
-        where: { phone: customer.phone },
+        where: { phone: customer.customerPhone },
       });
 
       if (dbCustomer?.doNotCall) {
         log.info(
-          { phone: maskPhone(customer.phone) },
+          { phone: maskPhone(customer.customerPhone) },
           'Skipping DNC-flagged customer'
         );
         continue;
@@ -100,21 +102,41 @@ async function dialCampaignCustomers(
         )
       ) {
         log.info(
-          { phone: maskPhone(customer.phone) },
+          { phone: maskPhone(customer.customerPhone) },
           'Skipping — outside calling hours'
         );
         continue;
       }
 
-      // Local stub for call creation
-      const callSid = `local-${Date.now()}`;
+      // Create the real Twilio call
+      let formattedPhone = customer.customerPhone.trim();
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '+91' + formattedPhone.substring(1);
+      } else if (formattedPhone.length === 10 && !formattedPhone.startsWith('+')) {
+        formattedPhone = '+91' + formattedPhone;
+      } else if (formattedPhone.length > 10 && !formattedPhone.startsWith('+')) {
+        formattedPhone = '+' + formattedPhone;
+      }
+
+      const callName = customer.customerName ?? dbCustomer?.name ?? 'Customer';
+      
+      const callOptions = {
+        to: formattedPhone,
+        from: env.TWILIO_PHONE_NUMBER,
+        url: `${env.BASE_URL}/api/call/answer?agentName=Priya&customerName=${encodeURIComponent(callName)}`,
+        statusCallback: `${env.BASE_URL}/api/call/status`,
+        method: 'POST' as const,
+      };
+
+      const call = await twilioClient.calls.create(callOptions);
+      const callSid = call.sid;
 
       // Record the call log
       await prisma.callLog.create({
         data: {
           callSid,
-          customerPhone: customer.phone,
-          customerName: customer.name ?? dbCustomer?.name,
+          customerPhone: customer.customerPhone,
+          customerName: customer.customerName ?? dbCustomer?.name,
           customerId: dbCustomer?.id,
           campaignId,
           status: 'INITIATED',
@@ -131,7 +153,7 @@ async function dialCampaignCustomers(
       await delay(env.INTER_CALL_DELAY_MS);
     } catch (error) {
       log.error(
-        { campaignId, phone: maskPhone(customer.phone), err: error },
+        { campaignId, phone: maskPhone(customer.customerPhone), err: error },
         'Failed to dial customer in campaign'
       );
     }

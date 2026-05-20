@@ -8,6 +8,7 @@ import Groq, { toFile } from 'groq-sdk';
 import { env, isConfigured } from '../config/env';
 import { createModuleLogger } from '../utils/logger';
 import { EventEmitter } from 'events';
+import { wrapMulawInWav } from '../utils/audio';
 
 const log = createModuleLogger('stt-service');
 
@@ -29,11 +30,12 @@ export class STTStream extends EventEmitter {
   private callSid: string;
   private isOpen = true;
   private audioChunks: Buffer[] = [];
+  private format: 'webm' | 'wav' = 'webm';
 
-  constructor(callSid: string, isBrowserStream: boolean = false) {
+  constructor(callSid: string, format: 'webm' | 'wav' = 'webm') {
     super();
     this.callSid = callSid;
-    // We only need isBrowserStream for compatibility with the old pipeline constructor
+    this.format = format;
   }
 
   async start(): Promise<void> {
@@ -59,8 +61,12 @@ export class STTStream extends EventEmitter {
       return;
     }
 
-    const fullBuffer = Buffer.concat(this.audioChunks);
+    let fullBuffer = Buffer.concat(this.audioChunks);
     this.audioChunks = []; // Reset for next utterance
+
+    if (this.format === 'wav') {
+      fullBuffer = wrapMulawInWav(fullBuffer) as any;
+    }
 
     if (fullBuffer.length < 500) {
       log.debug('Audio buffer too small, ignoring');
@@ -70,7 +76,9 @@ export class STTStream extends EventEmitter {
 
     // Use Groq's toFile helper to send buffer directly
     try {
-      const file = await toFile(fullBuffer, 'audio.webm', { type: 'audio/webm' });
+      const fileName = `audio.${this.format}`;
+      const fileType = `audio/${this.format}`;
+      const file = await toFile(fullBuffer, fileName, { type: fileType });
       const groq = getGroq();
       log.debug({ callSid: this.callSid, bytes: fullBuffer.length }, 'Sending to Groq Whisper...');
       
@@ -116,6 +124,6 @@ export class STTStream extends EventEmitter {
   }
 }
 
-export function createSTTStream(callSid: string, isBrowserStream: boolean = false): STTStream {
-  return new STTStream(callSid, isBrowserStream);
+export function createSTTStream(callSid: string, format: 'webm' | 'wav' = 'webm'): STTStream {
+  return new STTStream(callSid, format);
 }

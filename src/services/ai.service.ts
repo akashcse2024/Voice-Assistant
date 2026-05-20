@@ -7,6 +7,7 @@ import Groq from 'groq-sdk';
 import { env } from '../config/env';
 import { FALLBACK_RESPONSES } from '../config/constants';
 import { createModuleLogger } from '../utils/logger';
+import { sessionManager } from './session.service';
 
 const log = createModuleLogger('ai-service');
 
@@ -141,4 +142,30 @@ export async function generateChatResponse(
  */
 export async function generateGreeting(callSid: string): Promise<string> {
   return "Hello! I'm Priya from Vizza Insurance. Do you have 2 minutes?";
+}
+/**
+ * Generate a response for an active call session
+ */
+export async function generateCallResponse(
+  callSid: string,
+  transcript: string
+): Promise<string> {
+  const session = sessionManager.get(callSid);
+  if (!session) return FALLBACK_RESPONSES.AI_ERROR;
+
+  const messages = sessionManager.getConversationContext(callSid);
+  const language = detectLanguage(transcript);
+  
+  return await generateChatResponse(messages, 'Priya', language);
+}
+
+/**
+ * Analyze user intent (non-blocking)
+ */
+export async function analyzeIntent(text: string): Promise<any> {
+  // Mock intent analysis for now
+  return {
+    interestedPolicy: text.toLowerCase().includes('health') ? 'health' : null,
+    wantsToBuy: text.toLowerCase().includes('buy') || text.toLowerCase().includes('interested'),
+  };
 }

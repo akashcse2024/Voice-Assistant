@@ -1,0 +1,1 @@
+﻿<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Aditi" language="en-IN">This is a test. Priya is speaking. The TwiML is working correctly.</Say><Gather input="speech" action="https://saggy-aloof-attendee.ngrok-free.dev/api/call/respond" method="POST" language="en-IN" speechTimeout="3" /></Response>

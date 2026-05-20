@@ -22,6 +22,7 @@ import { dashboardRoutes } from './routes/dashboard.routes';
 import { testRoutes } from './routes/test.routes';
 import { ttsRoutes } from './routes/tts.routes';
 import { handleBrowserStream } from './pipeline/browser-stream';
+import { handleTwilioStream } from './pipeline/twilio-stream';
 import { logger } from './utils/logger';
 
 async function main() {
@@ -71,8 +72,12 @@ async function main() {
 
   // ========== WebSocket ==========
   fastify.register(async function (app) {
-    app.get('/browser-stream', { websocket: true }, (socket) => {
+    app.get('/browser-stream', { websocket: true }, (socket: any) => {
       handleBrowserStream(socket);
+    });
+
+    app.get('/api/calls/media-stream', { websocket: true }, (socket: any) => {
+      handleTwilioStream(socket);
     });
   });
 

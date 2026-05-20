@@ -1,31 +1,34 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import twilio from 'twilio';
-import { prisma } from '../db/prisma';
 import { env } from '../config/env';
-import { sessionManager } from '../services/session.service';
 import { generateChatResponse, detectLanguage } from '../services/ai.service';
+import { startCampaign } from '../services/campaign.service';
 import { createModuleLogger } from '../utils/logger';
-import { maskPhone } from '../utils/pii-mask';
 
 const log = createModuleLogger('call-routes');
 const twilioClient = twilio(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN);
 
-// Validation schemas
+/**
+ * GLOBAL CALL SESSIONS MAP
+ * Stores conversation history per CallSid
+ */
+const callSessions = new Map<string, any[]>();
+
+// Validation schema for start call
 const startCallSchema = z.object({
-  phone: z.string().min(10, 'Phone number required'),
-  name: z.string().optional(),
-  agent: z.enum(['Priya', 'Arjun']).default('Priya'),
+  customerPhone: z.string().min(10),
+  customerName: z.string().optional(),
+  agentName: z.enum(['Priya', 'Arjun']).default('Priya'),
 });
 
 const campaignSchema = z.object({
-  customers: z.array(
-    z.object({
-      phone: z.string().min(10),
-      name: z.string().optional(),
-    })
-  ),
-  agent: z.enum(['Priya', 'Arjun']).default('Priya'),
+  customers: z.array(z.object({
+    customerPhone: z.string().min(10),
+    customerName: z.string().optional(),
+  })),
+  agentName: z.enum(['Priya', 'Arjun']).default('Priya'),
+  campaignName: z.string().default('Bulk Campaign'),
 });
 
 export async function callRoutes(fastify: FastifyInstance): Promise<void> {
@@ -33,150 +36,237 @@ export async function callRoutes(fastify: FastifyInstance): Promise<void> {
    * POST /api/call/start — Initiate an outbound call
    */
   fastify.post('/start', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { phone, name, agent } = startCallSchema.parse(request.body);
+    console.log('START ROUTE HIT - body:', JSON.stringify(request.body || {}));
+    const body = (request.body || {}) as any;
+    
+    // Debug logging for received keys (PII masked)
+    const receivedKeys = Object.keys(body || {});
+    const maskedPhone = body.customerPhone ? 
+      (body.customerPhone.substring(0, 3) + '****' + body.customerPhone.substring(body.customerPhone.length - 3)) : 
+      (body.phone ? (body.phone.substring(0, 3) + '****' + body.phone.substring(body.phone.length - 3)) : 'missing');
+    
+    log.info({ receivedKeys, phoneProvided: maskedPhone }, 'RECEIVED START CALL REQUEST');
+
+    // Validation
+    const validation = startCallSchema.safeParse(body);
+    if (!validation.success) {
+      log.warn({ errors: validation.error.format() }, 'Validation failed for /api/call/start');
+      return reply.status(400).send({
+        error: "customerPhone is required",
+        details: validation.error.format(),
+        expectedBody: {
+          customerPhone: "+91XXXXXXXXXX",
+          customerName: "Optional Name",
+          agentName: "Priya | Arjun"
+        }
+      });
+    }
+
+    const { customerPhone, customerName, agentName } = validation.data;
+
+    // E.164 Formatting
+    let phone = customerPhone.trim();
+    if (phone.startsWith('0')) {
+      phone = '+91' + phone.substring(1);
+    } else if (phone.length === 10 && !phone.startsWith('+')) {
+      phone = '+91' + phone;
+    } else if (phone.length > 10 && !phone.startsWith('+')) {
+      phone = '+' + phone;
+    }
 
     try {
-      const call = await twilioClient.calls.create({
+      const callOptions = {
         to: phone,
         from: env.TWILIO_PHONE_NUMBER,
-        url: `${env.BASE_URL}/api/call/answer?agent=${agent}&name=${encodeURIComponent(name || 'Customer')}`,
+        url: `${env.BASE_URL}/api/call/answer?agentName=${agentName}&customerName=${encodeURIComponent(customerName || 'Customer')}`,
         statusCallback: `${env.BASE_URL}/api/call/status`,
-        statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-      });
+        method: 'POST' as const,
+      };
 
-      // Initialize session
-      sessionManager.create({
-        callSid: call.sid,
-        customerPhone: phone,
-        customerName: name,
-      });
+      log.info({ 
+        to: phone, 
+        from: callOptions.from, 
+        twimlUrl: callOptions.url 
+      }, 'INITIATING TWILIO CALL');
+      
+      const call = await twilioClient.calls.create(callOptions);
+      log.info({ callSid: call.sid }, 'TWILIO CALL CREATED SUCCESSFULLY');
 
-      log.info({ callSid: call.sid, phone: maskPhone(phone) }, 'Outbound call initiated');
+      // Initialize session history
+      callSessions.set(call.sid, []);
 
       return reply.send({
         success: true,
         callSid: call.sid,
-        message: 'Call initiated successfully',
       });
     } catch (error: any) {
-      log.error({ err: error, phone }, 'Failed to initiate Twilio call');
-      return reply.status(500).send({
-        success: false,
-        error: error.message,
+      log.error({ err: error }, 'Twilio Call Creation Failed');
+      return reply.status(500).send({ success: false, error: error.message });
+    }
+  });
+
+  /**
+   * POST /api/call/campaign — Start a bulk calling campaign
+   */
+  fastify.post('/campaign', async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = request.body as any;
+    
+    const validation = campaignSchema.safeParse(body);
+    if (!validation.success) {
+      return reply.status(400).send({
+        error: "Invalid campaign data",
+        details: validation.error.format(),
+        expectedBody: {
+          customers: [{ customerPhone: "+91XXXXXXXXXX", customerName: "Optional" }],
+          agentName: "Priya | Arjun",
+          campaignName: "Optional"
+        }
       });
     }
+
+    const { customers, agentName, campaignName } = validation.data;
+
+    try {
+      const result = await startCampaign({
+        name: campaignName,
+        customers: customers
+      });
+
+      return reply.send({
+        success: true,
+        campaignId: result.campaignId,
+        total: result.totalCustomers
+      });
+    } catch (error: any) {
+      log.error({ err: error }, 'Campaign Start Failed');
+      return reply.status(500).send({ success: false, error: error.message });
+    }
   });
 
   /**
-   * POST /api/call/answer — Twilio Answer Webhook
+   * POST/GET /api/call/answer — Twilio Answer Webhook (Media Stream)
    */
-  fastify.post('/answer', async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as any;
-    const callSid = body?.CallSid;
-    console.log(`TWILIO WEBHOOK HIT - CALL ANSWER — CallSid: ${callSid}`);
-
+  const answerHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = (request.body || {}) as any;
+    console.log('ANSWER ROUTE HIT - CallSid:', body.CallSid, 'To:', body.To);
     const query = request.query as any;
-    const agent = query.agent || 'Priya';
-    const name = query.name || 'Customer';
-    const voice = agent === 'Priya' ? 'Polly.Aditi' : 'Polly.Raveena';
+    const agentName = query.agentName || 'Priya';
+    const customerName = query.customerName || 'Customer';
 
     const twiml = new twilio.twiml.VoiceResponse();
-    const greeting = `Hello ${name}! I am ${agent} from Vizza Insurance. I'm calling to discuss your insurance needs. Do you have a moment to talk?`;
-
-    twiml.say({ voice: voice as any, language: 'en-IN' }, greeting);
     
-    // Initial Gather
+    // Derived WebSocket URL from BASE_URL
+    const wsUrl = env.BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://');
+    const streamUrl = `${wsUrl}/api/calls/media-stream`;
+
+    log.info({ streamUrl, agentName, baseUrl: env.BASE_URL }, 'Returning Media Stream TwiML');
+
+    const connect = twiml.connect();
+    const stream = connect.stream({
+      url: streamUrl,
+    });
+    
+    // Pass metadata to the stream
+    stream.parameter({ name: 'agentName', value: agentName });
+    stream.parameter({ name: 'customerName', value: customerName });
+
+    // FALLBACK: If the media stream connection fails, Twilio falls through to
+    // these TwiML verbs so the caller hears a greeting instead of "An application
+    // error has occurred".
+    twiml.say(
+      { voice: 'Polly.Aditi' as any, language: 'en-IN' },
+      `Hello! I am ${agentName} from Vizza Insurance. How can I help you today?`
+    );
     twiml.gather({
       input: ['speech'],
-      action: `${env.BASE_URL}/api/call/respond?agent=${agent}`,
+      action: `${env.BASE_URL}/api/call/respond?agentName=${agentName}`,
+      method: 'POST',
       language: 'en-IN',
-      speechTimeout: 'auto',
+      speechTimeout: '3',
       speechModel: 'phone_call',
-      enhanced: true as any,
     });
 
-    // Fallback if no speech detected
-    twiml.say({ voice: voice as any, language: 'en-IN' }, "I did not hear anything. Please call us back later. Goodbye.");
-    twiml.hangup();
+    const twimlStr = twiml.toString();
+    log.info({ twiml: twimlStr }, 'Generated TwiML');
 
-    // Add to history
-    if (callSid) {
-      sessionManager.addMessage(callSid, { role: 'assistant', content: greeting });
-    }
+    return reply.type('text/xml').send(twimlStr);
+  };
 
-    return reply.type('text/xml').send(twiml.toString());
-  });
+  fastify.post('/answer', answerHandler);
+  fastify.get('/answer', answerHandler);
 
   /**
-   * POST /api/call/respond — Twilio Response Webhook
+   * POST /api/call/respond — Twilio Response Webhook (AI PROCESSING)
    */
   fastify.post('/respond', async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as any;
-    const speechResult = body?.SpeechResult;
-    const callSid = body?.CallSid;
-    
-    console.log(`TWILIO WEBHOOK HIT - CALL RESPOND — SpeechResult: "${speechResult}" — CallSid: ${callSid}`);
-
+    const body = (request.body || {}) as any;
+    console.log('RESPOND ROUTE HIT - Speech:', body.SpeechResult, 'CallSid:', body.CallSid);
+    const speechResult = body.SpeechResult;
+    const callSid = body.CallSid;
     const query = request.query as any;
-    const agent = query.agent || 'Priya';
-    const voice = agent === 'Priya' ? 'Polly.Aditi' : 'Polly.Raveena';
+    const agentName = query.agentName || 'Priya';
 
     const twiml = new twilio.twiml.VoiceResponse();
 
     if (!speechResult) {
-      twiml.say({ voice: voice as any, language: 'en-IN' }, "I'm sorry, I didn't catch that. Could you please repeat?");
+      twiml.say({ voice: 'Polly.Aditi' as any, language: 'en-IN' }, "I did not catch that, could you repeat please");
       twiml.gather({
         input: ['speech'],
-        action: `${env.BASE_URL}/api/call/respond?agent=${agent}`,
+        action: `${env.BASE_URL}/api/call/respond?agentName=${agentName}`,
+        method: 'POST',
         language: 'en-IN',
-        speechTimeout: 'auto',
+        speechTimeout: '3',
         speechModel: 'phone_call',
-        enhanced: true as any,
       });
-      
-      // Fallback if no speech detected after retry
-      twiml.say({ voice: voice as any, language: 'en-IN' }, "Still nothing. I'll let you go for now. Goodbye.");
-      twiml.hangup();
-
       return reply.type('text/xml').send(twiml.toString());
     }
 
-    // Process with AI
+    // Process with Groq and history
     try {
-      sessionManager.addMessage(callSid, { role: 'user', content: speechResult });
-      
-      const history = sessionManager.getConversationContext(callSid);
+      let history = callSessions.get(callSid) || [];
+      history.push({ role: 'user', content: speechResult });
+
       const language = detectLanguage(speechResult);
-      
-      const aiReply = await generateChatResponse(history, agent, language);
-      sessionManager.addMessage(callSid, { role: 'assistant', content: aiReply });
 
-      // Check for escalation
-      const escalationKeywords = ['complaint', 'manager', 'human', 'supervisor', 'talk to someone'];
-      const needsEscalation = escalationKeywords.some(kw => speechResult.toLowerCase().includes(kw));
+      // 8 second timeout logic
+      const aiResponsePromise = generateChatResponse(history, agentName, language);
+      const timeoutPromise = new Promise<string>((_, reject) => 
+        setTimeout(() => reject(new Error('TIMEOUT')), 8000)
+      );
 
-      if (needsEscalation && env.HUMAN_AGENT_NUMBER) {
-        twiml.say({ voice: voice as any, language: 'en-IN' }, "I understand. Let me transfer you to a human agent right away. Please hold on.");
-        twiml.dial(env.HUMAN_AGENT_NUMBER);
-      } else {
-        twiml.say({ voice: voice as any, language: 'en-IN' }, aiReply);
-        twiml.gather({
-          input: ['speech'],
-          action: `${env.BASE_URL}/api/call/respond?agent=${agent}`,
-          language: 'en-IN',
-          speechTimeout: 'auto',
-          speechModel: 'phone_call',
-          enhanced: true as any,
-        });
-
-        // Fallback
-        twiml.say({ voice: voice as any, language: 'en-IN' }, "I'm waiting for your response. If you're still there, please speak up, or we can talk later. Goodbye.");
-        twiml.hangup();
+      let aiReply: string;
+      try {
+        aiReply = await Promise.race([aiResponsePromise, timeoutPromise]);
+      } catch (err) {
+        log.warn({ callSid }, 'Groq Timeout or Error');
+        aiReply = "I am having a small technical issue, please repeat your question";
       }
+
+      history.push({ role: 'assistant', content: aiReply });
+      callSessions.set(callSid, history);
+
+      twiml.say({ voice: 'Polly.Aditi' as any, language: 'en-IN' }, aiReply);
+
+      twiml.gather({
+        input: ['speech'],
+        action: `${env.BASE_URL}/api/call/respond?agentName=${agentName}`,
+        method: 'POST',
+        language: 'en-IN',
+        speechTimeout: '3',
+        speechModel: 'phone_call',
+      });
+
     } catch (error) {
-      log.error({ err: error, callSid }, 'AI processing error in call');
-      twiml.say({ voice: voice as any, language: 'en-IN' }, "I'm having a bit of trouble connecting to my system. Can we speak again in a few minutes?");
-      twiml.hangup();
+      log.error({ error }, 'RESPOND ROUTE ERROR');
+      twiml.say({ voice: 'Polly.Aditi' as any, language: 'en-IN' }, "I am having a small technical issue, please repeat your question");
+      twiml.gather({
+        input: ['speech'],
+        action: `${env.BASE_URL}/api/call/respond?agentName=${agentName}`,
+        method: 'POST',
+        language: 'en-IN',
+        speechTimeout: '3',
+        speechModel: 'phone_call',
+      });
     }
 
     return reply.type('text/xml').send(twiml.toString());
@@ -186,68 +276,60 @@ export async function callRoutes(fastify: FastifyInstance): Promise<void> {
    * POST /api/call/status — Twilio Status Callback
    */
   fastify.post('/status', async (request: FastifyRequest, reply: FastifyReply) => {
-    const body = request.body as any;
+    const body = (request.body || {}) as any;
+    console.log('STATUS ROUTE HIT - Status:', body.CallStatus, 'Duration:', body.CallDuration);
     const callSid = body.CallSid;
     const status = body.CallStatus;
-    const duration = body.CallDuration;
 
-    log.info({ callSid, status, duration }, 'Call status update');
+    log.info({ callSid, status }, 'CALL STATUS UPDATE');
 
-    if (['completed', 'failed', 'busy', 'no-answer'].includes(status)) {
-      const session = sessionManager.get(callSid);
-      if (session) {
-        // Log to database if prisma is available
-        try {
-          await prisma.callLog.create({
-            data: {
-              callSid,
-              customerPhone: session.customerPhone,
-              customerName: session.customerName,
-              status: status.toUpperCase(),
-              duration: duration ? parseInt(duration) : 0,
-              transcript: JSON.stringify(session.conversationHistory),
-            },
-          });
-        } catch (dbError) {
-          log.warn({ dbError }, 'Failed to save call log to database');
-        }
-        sessionManager.destroy(callSid);
-      }
+    if (status === 'completed' || status === 'failed') {
+      callSessions.delete(callSid);
+      log.info({ callSid }, 'Session cleaned up');
     }
 
     return reply.send({ success: true });
   });
 
   /**
-   * POST /api/call/campaign — Sequential Campaign
+   * Diagnostic 9 — Twilio Credentials Verification
    */
-  fastify.post('/campaign', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { customers, agent } = campaignSchema.parse(request.body);
-    
-    log.info({ count: customers.length }, 'Starting sequential campaign');
+  fastify.get('/twilio-test', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const client = twilio(env.TWILIO_ACCOUNT_SID, env.TWILIO_AUTH_TOKEN);
+      const account = await client.api.accounts(env.TWILIO_ACCOUNT_SID).fetch();
+      return reply.send({
+        status: 'credentials valid',
+        accountName: account.friendlyName,
+        accountStatus: account.status,
+        twilioNumber: env.TWILIO_PHONE_NUMBER,
+        baseUrl: env.BASE_URL
+      });
+    } catch (err: any) {
+      return reply.send({
+        status: 'credentials failed',
+        error: err.message
+      });
+    }
+  });
 
-    // Start in background
-    (async () => {
-      for (const customer of customers) {
-        try {
-          await twilioClient.calls.create({
-            to: customer.phone,
-            from: env.TWILIO_PHONE_NUMBER,
-            url: `${env.BASE_URL}/api/call/answer?agent=${agent}&name=${encodeURIComponent(customer.name || 'Customer')}`,
-          });
-          log.info({ phone: customer.phone }, 'Campaign call initiated');
-        } catch (err) {
-          log.error({ err, phone: customer.phone }, 'Failed to initiate campaign call');
-        }
-        // Wait 5 seconds between calls as requested
-        await new Promise(resolve => setTimeout(resolve, 5000));
-      }
-    })();
-
-    return reply.send({
-      success: true,
-      message: `Campaign started for ${customers.length} customers`,
+  /**
+   * Diagnostic 10 — Manual TwiML Test
+   */
+  fastify.get('/twiml-test', async (request: FastifyRequest, reply: FastifyReply) => {
+    const response = new twilio.twiml.VoiceResponse();
+    response.say({
+      voice: 'Polly.Aditi' as any,
+      language: 'en-IN'
+    }, 'This is a test. Priya is speaking. The TwiML is working correctly.');
+    response.gather({
+      input: ['speech'],
+      action: env.BASE_URL + '/api/call/respond',
+      method: 'POST',
+      language: 'en-IN',
+      speechTimeout: '3'
     });
+    return reply.type('text/xml').send(response.toString());
   });
 }
 

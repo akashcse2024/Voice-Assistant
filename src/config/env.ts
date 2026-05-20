@@ -31,9 +31,6 @@ const envSchema = z.object({
   // Deepgram (optional — only needed for voice pipeline)
   DEEPGRAM_API_KEY: z.string().default(''),
 
-  // Deepgram (optional — only needed for voice pipeline)
-  DEEPGRAM_API_KEY: z.string().default(''),
-
   // Groq (Primary AI Engine)
   GROQ_API_KEY: z.string().default(''),
   GROQ_MODEL: z.string().default('llama3-8b-8192'),

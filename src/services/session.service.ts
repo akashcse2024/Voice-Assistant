@@ -4,8 +4,7 @@
  * customer metadata, and collected data points.
  */
 
-import type { CallState } from '@prisma/client';
-import type { CallSession, ConversationMessage, CollectedData } from '../types';
+import type { CallState, CallSession, ConversationMessage, CollectedData } from '../types';
 import { createModuleLogger } from '../utils/logger';
 import { maskPhone } from '../utils/pii-mask';
 
@@ -199,7 +198,7 @@ class SessionManager {
     if (!session) return [];
 
     return session.conversationHistory.map((msg) => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
       content: msg.content,
     }));
   }

@@ -6,7 +6,7 @@
 import { env } from '../config/env';
 import { sessionManager } from '../services/session.service';
 import { generateCallResponse, generateGreeting, analyzeIntent } from '../services/ai.service';
-import { synthesizeSpeech, synthesizeSpeechHindi, isHindiText } from '../services/tts.service';
+import { synthesizeSpeech, synthesizeSpeechHindi, isHindiText, synthesizeSpeechMulaw } from '../services/tts.service';
 import {
   checkEscalation,
   checkLowConfidenceEscalation,
@@ -16,8 +16,7 @@ import {
 import { createModuleLogger } from '../utils/logger';
 import { bufferToBase64, splitIntoChunks } from '../utils/audio';
 import { prisma } from '../db/prisma';
-import type { ConversationMessage, PipelineResult, STTResult } from '../types';
-import type { PolicyType } from '@prisma/client';
+import type { ConversationMessage, PipelineResult, STTResult, PolicyType } from '../types';
 
 const log = createModuleLogger('voice-pipeline');
 
@@ -240,4 +239,46 @@ async function logCallEvent(
     // Non-critical — don't let event logging break the pipeline
     log.debug({ callSid, eventType, err: error }, 'Failed to log call event');
   }
+}
+/**
+ * Twilio Version: Process utterance and return mulaw chunks
+ */
+export async function processUtteranceMulaw(
+  callSid: string,
+  sttResult: STTResult,
+  agentName = 'Priya'
+): Promise<{ aiResponse: string, audioChunks: Buffer[] } | null> {
+  const startTime = Date.now();
+  const session = sessionManager.get(callSid);
+  if (!session) return null;
+
+  const { transcript } = sttResult;
+  sessionManager.addMessage(callSid, { role: 'customer', content: transcript, timestamp: new Date().toISOString() });
+
+  const aiResponse = await generateCallResponse(callSid, transcript);
+  sessionManager.addMessage(callSid, { role: 'assistant', content: aiResponse, timestamp: new Date().toISOString() });
+
+  // Synthesize directly to mulaw
+  const audioBuffer = await synthesizeSpeechMulaw(aiResponse, agentName);
+  const chunks = splitIntoChunks(audioBuffer, 160); // 160 bytes = 20ms of mulaw
+
+  log.info({ callSid, latency: Date.now() - startTime }, 'Twilio turn completed');
+
+  return { aiResponse, audioChunks: chunks };
+}
+
+/**
+ * Twilio Version: Process greeting and return mulaw chunks
+ */
+export async function processGreetingMulaw(
+  callSid: string,
+  agentName = 'Priya'
+): Promise<{ aiResponse: string, audioChunks: Buffer[] }> {
+  const greeting = await generateGreeting(callSid);
+  sessionManager.addMessage(callSid, { role: 'assistant', content: greeting, timestamp: new Date().toISOString() });
+
+  const audioBuffer = await synthesizeSpeechMulaw(greeting, agentName);
+  const chunks = splitIntoChunks(audioBuffer, 160);
+
+  return { aiResponse: greeting, audioChunks: chunks };
 }

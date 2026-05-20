@@ -2,7 +2,8 @@
  * Shared TypeScript types for the SafeShield Voice Assistant
  */
 
-import type { CallState, PolicyType } from '@prisma/client';
+export type CallState = string;
+export type PolicyType = string;
 
 // ============================================
 // Session Types

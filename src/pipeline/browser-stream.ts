@@ -27,8 +27,8 @@ export function handleBrowserStream(ws: WebSocket): void {
     customerPhone: 'browser',
   });
 
-  // Initialize Deepgram STT stream (isBrowserStream = true)
-  sttStream = createSTTStream(callSid, true);
+  // Initialize Deepgram STT stream (format = 'webm' for browser)
+  sttStream = createSTTStream(callSid, 'webm');
   setupSTTHandlers(sttStream, ws, callSid);
   
   sttStream.start().then(() => {

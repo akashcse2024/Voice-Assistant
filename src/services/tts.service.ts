@@ -5,8 +5,14 @@
  */
 
 import { EdgeTTS, SynthesisOptions, Constants } from '@andresaya/edge-tts';
+import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import { PassThrough } from 'stream';
 import { createModuleLogger } from '../utils/logger';
 import type { TTSResult } from '../types';
+
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 const log = createModuleLogger('tts-service');
 
@@ -96,4 +102,49 @@ export function isHindiText(text: string): boolean {
   const totalAlpha = (text.match(/[a-zA-Z\u0900-\u097F]/g) || []).length;
 
   return totalAlpha > 0 && devanagariChars / totalAlpha > 0.4;
+}
+/**
+ * Synthesize speech directly to 8kHz mulaw for Twilio Media Streams
+ */
+export async function synthesizeSpeechMulaw(text: string, agentName = 'Priya'): Promise<Buffer> {
+  const startTime = Date.now();
+  const voice = agentName === 'Arjun' ? 'en-IN-PrabhatNeural' : 'en-IN-NeerjaNeural';
+  
+  try {
+    const tts = new MsEdgeTTS();
+    // Edge API limits raw mulaw, so we generate MP3 and transcode to Mulaw via FFmpeg
+    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
+    
+    const { audioStream } = tts.toStream(text);
+    
+    const audioBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const outStream = new PassThrough();
+      const chunks: Buffer[] = [];
+      outStream.on('data', (chunk) => chunks.push(chunk));
+      outStream.on('end', () => resolve(Buffer.concat(chunks)));
+      outStream.on('error', (err) => reject(err));
+
+      ffmpeg(audioStream)
+        .inputFormat('mp3')
+        .audioCodec('pcm_mulaw')
+        .audioFrequency(8000)
+        .audioChannels(1)
+        .format('mulaw')
+        .on('error', (err: any) => {
+          log.error({ err }, 'FFmpeg transcoding to Mulaw failed');
+          reject(err);
+        })
+        .pipe(outStream);
+    });
+
+    log.info(
+      { textLength: text.length, audioBytes: audioBuffer.length, latencyMs: Date.now() - startTime },
+      'TTS Mulaw synthesis completed'
+    );
+    
+    return audioBuffer;
+  } catch (error) {
+    log.error({ err: error }, 'TTS Mulaw synthesis failed');
+    return Buffer.from([]);
+  }
 }
