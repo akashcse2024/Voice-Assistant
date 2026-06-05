@@ -23,6 +23,8 @@ import { testRoutes } from './routes/test.routes';
 import { ttsRoutes } from './routes/tts.routes';
 import { handleBrowserStream } from './pipeline/browser-stream';
 import { handleTwilioStream } from './pipeline/twilio-stream';
+import { preloadGreeting } from './pipeline/voice-pipeline';
+import { preloadTTSVoices } from './services/tts.service';
 import { logger } from './utils/logger';
 
 async function main() {
@@ -86,6 +88,9 @@ async function main() {
 
   // ========== Start Server ==========
   try {
+    await preloadTTSVoices();
+    await preloadGreeting('Priya');
+    logger.info('Preloaded greeting audio.');
     const address = await fastify.listen({ port: env.PORT, host: env.HOST });
 
     const check = (ok: boolean) => (ok ? '✅' : '❌');

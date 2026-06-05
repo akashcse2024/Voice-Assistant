@@ -170,22 +170,6 @@ export async function callRoutes(fastify: FastifyInstance): Promise<void> {
     stream.parameter({ name: 'agentName', value: agentName });
     stream.parameter({ name: 'customerName', value: customerName });
 
-    // FALLBACK: If the media stream connection fails, Twilio falls through to
-    // these TwiML verbs so the caller hears a greeting instead of "An application
-    // error has occurred".
-    twiml.say(
-      { voice: 'Polly.Aditi' as any, language: 'en-IN' },
-      `Hello! I am ${agentName} from Vizza Insurance. How can I help you today?`
-    );
-    twiml.gather({
-      input: ['speech'],
-      action: `${env.BASE_URL}/api/call/respond?agentName=${agentName}`,
-      method: 'POST',
-      language: 'en-IN',
-      speechTimeout: '3',
-      speechModel: 'phone_call',
-    });
-
     const twimlStr = twiml.toString();
     log.info({ twiml: twimlStr }, 'Generated TwiML');
 

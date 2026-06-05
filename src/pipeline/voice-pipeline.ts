@@ -6,7 +6,7 @@
 import { env } from '../config/env';
 import { sessionManager } from '../services/session.service';
 import { generateCallResponse, generateGreeting, analyzeIntent } from '../services/ai.service';
-import { synthesizeSpeech, synthesizeSpeechHindi, isHindiText, synthesizeSpeechMulaw } from '../services/tts.service';
+import { synthesizeSpeech, synthesizeSpeechHindi, isHindiText, synthesizeSpeechMulaw, getVoiceForAgent } from '../services/tts.service';
 import {
   checkEscalation,
   checkLowConfidenceEscalation,
@@ -246,8 +246,9 @@ async function logCallEvent(
 export async function processUtteranceMulaw(
   callSid: string,
   sttResult: STTResult,
-  agentName = 'Priya'
-): Promise<{ aiResponse: string, audioChunks: Buffer[] } | null> {
+  agentName = 'Priya',
+  languageMode = 'english'
+): Promise<{ aiResponse: string, audioBuffer: Buffer } | null> {
   const startTime = Date.now();
   const session = sessionManager.get(callSid);
   if (!session) return null;
@@ -259,12 +260,23 @@ export async function processUtteranceMulaw(
   sessionManager.addMessage(callSid, { role: 'assistant', content: aiResponse, timestamp: new Date().toISOString() });
 
   // Synthesize directly to mulaw
-  const audioBuffer = await synthesizeSpeechMulaw(aiResponse, agentName);
-  const chunks = splitIntoChunks(audioBuffer, 160); // 160 bytes = 20ms of mulaw
+  const voice = getVoiceForAgent(agentName, languageMode);
+  const audioBuffer = await synthesizeSpeechMulaw(aiResponse, voice);
 
-  log.info({ callSid, latency: Date.now() - startTime }, 'Twilio turn completed');
+  return { aiResponse, audioBuffer };
+}
 
-  return { aiResponse, audioChunks: chunks };
+export let cachedGreetingMulawBuffer: Buffer | null = null;
+
+export async function preloadGreeting(agentName = 'Priya', languageMode = 'english') {
+  try {
+    const greeting = await generateGreeting('');
+    const voice = getVoiceForAgent(agentName, languageMode);
+    const audioBuffer = await synthesizeSpeechMulaw(greeting, voice);
+    cachedGreetingMulawBuffer = audioBuffer;
+  } catch (error) {
+    log.error({ err: error }, 'Failed to preload greeting');
+  }
 }
 
 /**
@@ -272,13 +284,18 @@ export async function processUtteranceMulaw(
  */
 export async function processGreetingMulaw(
   callSid: string,
-  agentName = 'Priya'
-): Promise<{ aiResponse: string, audioChunks: Buffer[] }> {
+  agentName = 'Priya',
+  languageMode = 'english'
+): Promise<{ aiResponse: string, audioBuffer: Buffer }> {
   const greeting = await generateGreeting(callSid);
   sessionManager.addMessage(callSid, { role: 'assistant', content: greeting, timestamp: new Date().toISOString() });
 
-  const audioBuffer = await synthesizeSpeechMulaw(greeting, agentName);
-  const chunks = splitIntoChunks(audioBuffer, 160);
+  if (cachedGreetingMulawBuffer) {
+    return { aiResponse: greeting, audioBuffer: cachedGreetingMulawBuffer };
+  }
 
-  return { aiResponse: greeting, audioChunks: chunks };
+  const voice = getVoiceForAgent(agentName, languageMode);
+  const audioBuffer = await synthesizeSpeechMulaw(greeting, voice);
+
+  return { aiResponse: greeting, audioBuffer };
 }

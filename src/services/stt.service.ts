@@ -31,11 +31,13 @@ export class STTStream extends EventEmitter {
   private isOpen = true;
   private audioChunks: Buffer[] = [];
   private format: 'webm' | 'wav' = 'webm';
+  private language: string = 'en';
 
-  constructor(callSid: string, format: 'webm' | 'wav' = 'webm') {
+  constructor(callSid: string, format: 'webm' | 'wav' = 'webm', language = 'en') {
     super();
     this.callSid = callSid;
     this.format = format;
+    this.language = language;
   }
 
   async start(): Promise<void> {
@@ -68,7 +70,7 @@ export class STTStream extends EventEmitter {
       fullBuffer = wrapMulawInWav(fullBuffer) as any;
     }
 
-    if (fullBuffer.length < 500) {
+    if (fullBuffer.length < 8000) {
       log.debug('Audio buffer too small, ignoring');
       this.emit('empty_transcript');
       return;
@@ -86,7 +88,7 @@ export class STTStream extends EventEmitter {
       const transcription = await groq.audio.transcriptions.create({
         file,
         model: 'whisper-large-v3-turbo',
-        language: 'en',
+        language: this.language,
         response_format: 'json',
       }, { timeout: 5000, maxRetries: 0 });
       const latencyMs = Date.now() - startTime;
@@ -124,6 +126,6 @@ export class STTStream extends EventEmitter {
   }
 }
 
-export function createSTTStream(callSid: string, format: 'webm' | 'wav' = 'webm'): STTStream {
-  return new STTStream(callSid, format);
+export function createSTTStream(callSid: string, format: 'webm' | 'wav' = 'webm', language = 'en'): STTStream {
+  return new STTStream(callSid, format, language);
 }

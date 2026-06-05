@@ -125,7 +125,7 @@ export async function generateChatResponse(
         { role: 'system', content: systemPrompt },
         ...messages
       ],
-      max_tokens: language === 'tamil' ? 300 : 150,
+      max_tokens: 80,
       temperature: 0.7,
       stop: [".", "?", "!", "।"]
     });
